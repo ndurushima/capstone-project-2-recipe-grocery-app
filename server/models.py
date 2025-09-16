@@ -1,5 +1,4 @@
-import bcrypt
-from . import db
+from .extensions import db, bcrypt
 
 
 class User(db.Model):
@@ -7,7 +6,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True, nullable=False)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    _paasword_hash = db.Column(db.String(100), nullable=False)
+    _password_hash = db.Column(db.String(100), nullable=False)
 
     recipes = db.relationship("Recipe", backref="user", cascade="all, delete-orphan")
     meal_plans = db.relationship("MealPlan", backref="user", cascade="all, delete-orphan")
@@ -37,7 +36,7 @@ class Recipe(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     ingredients = db.Column(db.Text, nullable=False)
-    steps = db.Column(db.Text, nullable=False)
+    steps = db.Column(db.Text)
 
     def to_dict(self):
         return {
@@ -55,8 +54,8 @@ class MealPlan(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     week_start = db.Column(db.Date, nullable=False)
 
-    items = db.relationship("shoppingItem", backref="meal_plan", cascade="all, delete-orphan")
-    shopping_items = db.relationship("shoppingItem", backref="meal_plan", cascade="all, delete-orphan")
+    items = db.relationship("MealItem", backref="meal_plan", cascade="all, delete-orphan")
+    shopping_items = db.relationship("ShoppingItem", backref="meal_plan", cascade="all, delete-orphan")
 
     def to_dict(self, include_items=False, include_shopping=False):
         data = {
@@ -99,7 +98,7 @@ class ShoppingItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     meal_plan_id = db.Column(db.Integer, db.ForeignKey("meal_plans.id"), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    quantity = db.Column(db.String(50), nullable=False)
+    quantity = db.Column(db.String(50))
     checked = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
