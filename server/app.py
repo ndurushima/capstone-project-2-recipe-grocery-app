@@ -19,12 +19,12 @@ def create_app(config_class=Config):
 
 
     # Import and register blueprints
-    # from .auth import auth_bp
-    # from .api import api_bp
+    from .auth import auth_bp
+    from .api import api_bp
     from . import models
 
-    # app.register_blueprint(auth_bp, url_prefix="/auth")
-    # app.register_blueprint(api_bp)
+    app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(api_bp)
 
 
     @app.get("/")
