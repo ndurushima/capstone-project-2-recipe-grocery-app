@@ -70,7 +70,7 @@ def create_meal_plan():
     return meal_plan.to_dict(), 201
 
 
-@api_bp.get("/meal_plans/<int:mpid>")
+@api_bp.get("/meal_plans/<int:meal_plan_id>")
 @jwt_required()
 def get_meal_plan(meal_plan_id):
     uid = get_jwt_identity()
@@ -78,7 +78,7 @@ def get_meal_plan(meal_plan_id):
     return meal_plan.to_dict(include_items=True, include_shopping=True)
 
 
-@api_bp.delete("/meal_plans/<int:mpid>")
+@api_bp.delete("/meal_plans/<int:meal_plan_id>")
 @jwt_required()
 def delete_meal_plan(meal_plan_id):
     uid = get_jwt_identity()
@@ -101,7 +101,7 @@ def create_meal_item():
     return meal_item.to_dict(), 201
 
 
-@api_bp.patch("/meal_items/<int:miid>")
+@api_bp.patch("/meal_items/<int:meal_item_id>")
 @jwt_required()
 def update_meal_item(miid):
     uid = get_jwt_identity()
@@ -151,7 +151,7 @@ def create_shopping_item():
     return shopping_item.to_dict(), 201
 
 
-@api_bp.patch("/shopping_items/<int:sid>")
+@api_bp.patch("/shopping_items/<int:shopping_item_id>")
 @jwt_required()
 def update_shopping_item(shopping_item_id):
     uid = get_jwt_identity()
@@ -167,7 +167,7 @@ def update_shopping_item(shopping_item_id):
     return shopping_item.to_dict()
 
 
-@api_bp.delete("/shopping_items/<int:sid>")
+@api_bp.delete("/shopping_items/<int:shopping_item_id>")
 @jwt_required()
 def delete_shopping_item(shopping_item_id):
     uid = get_jwt_identity()
@@ -175,3 +175,35 @@ def delete_shopping_item(shopping_item_id):
     db.session.delete(shopping_item)
     db.session.commit()
     return {"ok": True}
+
+
+# ------- Utility: Generate Shopping List from Meal Plan -------
+@api_bp.post("/meal_plans/<int:meal_plan_id>/generate_list")
+@jwt_required()
+def generate_list(meal_plan_id):
+    uid = get_jwt_identity()
+    meal_plan = MealPlan.query.filter_by(id=meal_plan_id, user_id=uid).first_or_404()
+
+
+    # naive implementation: aggregate newline-separated ingredients from each recipe
+    from collections import Counter
+    bucket = Counter()
+
+
+    for item in meal_plan.items:
+        if item.recipe and item.recipe.ingredients:
+            for line in item.recipe.ingredients.splitlines():
+                name = line.strip()
+                if name:
+                    bucket[name] += 1
+
+
+    # Upsert into ShoppingItem (simple: clear then insert)
+    ShoppingItem.query.filter_by(meal_plan_id=meal_plan.id).delete()
+    for name, count in bucket.items():
+        shopping_item = ShoppingItem(meal_plan_id=meal_plan.id, name=name, quantity=str(count))
+        db.session.add(shopping_item)
+    db.session.commit()
+
+
+    return meal_plan.to_dict(include_shopping=True)
