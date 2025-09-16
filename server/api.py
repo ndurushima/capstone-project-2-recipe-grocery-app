@@ -184,11 +184,9 @@ def generate_list(meal_plan_id):
     uid = get_jwt_identity()
     meal_plan = MealPlan.query.filter_by(id=meal_plan_id, user_id=uid).first_or_404()
 
-
     # naive implementation: aggregate newline-separated ingredients from each recipe
     from collections import Counter
     bucket = Counter()
-
 
     for item in meal_plan.items:
         if item.recipe and item.recipe.ingredients:
