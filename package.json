@@ -22,8 +22,10 @@
   },
   "homepage": "https://github.com/ndurushima/capstone-project-2-recipe-grocery-app#readme",
   "dependencies": {
+    "ky": "^1.10.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-router-dom": "^7.9.1",
     "vite": "^7.1.5"
   }
 }
