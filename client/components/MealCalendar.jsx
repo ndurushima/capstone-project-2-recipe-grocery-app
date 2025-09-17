@@ -44,3 +44,65 @@ export default function MealCalendar() {
     );
 }
 
+function PlanGrid({ mealPlanId }) {
+    const [items, setItems] = useState([]);
+    const [recipes, setRecipes] = useState([]);
+
+    async function load() {
+        const mp = await api.get(`meal_plans/${mealPlanId}`).json();
+        setItems(mp.items || []);
+        const recs = await api.get("recipes?per_page=100").json();
+        setRecipes(recs.items || []);
+    }
+    useEffect(() => { load(); }, [mealPlanId]);
+
+    async function add(day, meal_type, recipe_id) {
+        const mi = await api.post("meal_items", { json: { meal_plan_id: mealPlanId, day, meal_type, recipe_id } }).json();
+        setItems(prev => [...prev, mi]);
+    }
+
+    async function generateList() {
+        await api.post(`meal_plans/${mealPlanId}/generate_list`).json();
+        alert("Shopping list generated!");
+    }
+
+    return (
+        <div style={{ marginTop: 16 }}>
+            <button onClick={generateList}>Generate Shopping List</button>
+            <table style={{ width: "100%", marginTop: 12 }}>
+                <thead>
+                    <tr>
+                        <th>Day</th>
+                        {TYPES.map(t => <th key={t}>{t}</th>)}
+                    </tr>
+                </thead>
+                <tbody>
+                    {DAYS.map(d => (
+                        <tr key={d}>
+                            <td>{d}</td>
+                            {TYPES.map(t => (
+                                <td key={t}>
+                                    <MealCell day={d} type={t} items={items.filter(i => i.day===d && i.meal_type===t)} recipes={recipes} onAdd={add} />
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    )
+}
+
+function MealCell({ day, type, items, recipes, onAdd }) {
+    return (
+        <div>
+            <ul>
+                {items.map(i => <li key={i.id}>{i.recipe?.title || "(no recipe)"}</li>)}
+            </ul>
+            <select onChange={e => e.target.value && onAdd(day, type, Number(e.target.value))} defaultValue="">
+                <option value="" disabled>Add recipe...</option>
+                {recipes.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+            </select>
+        </div>
+    );
+}
