@@ -14,14 +14,14 @@ api_bp = Blueprint("api", __name__)
 @api_bp.get("/recipes")
 @jwt_required()
 def list_recipes():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     query = Recipe.query.filter_by(user_id=uid).order_by(Recipe.id.desc())
     return paginate(query, request)
 
 @api_bp.post("/recipes")
 @jwt_required()
 def create_recipe():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     data = request.get_json() or {}
     recipe = Recipe(user_id=uid, title=data.get("title", "Untitled"), ingredients=data.get("ingredients", ""), steps=data.get("steps"))
     db.session.add(recipe)
@@ -31,14 +31,14 @@ def create_recipe():
 @api_bp.get("/recipes/<int:recipe_id>")
 @jwt_required()
 def get_recipe(recipe_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     recipe = Recipe.query.filter_by(id=recipe_id, user_id=uid).first_or_404()
     return recipe.to_dict(), 200
 
 @api_bp.patch("/recipes/<int:recipe_id>")
 @jwt_required()
 def update_recipe(recipe_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     recipe = Recipe.query.filter_by(id=recipe_id, user_id=uid).first_or_404()
     data = request.get_json() or {}
     if "title" in data:
@@ -55,7 +55,7 @@ def update_recipe(recipe_id):
 @api_bp.get("/meal_plans")
 @jwt_required()
 def list_meal_plans():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     query = MealPlan.query.filter_by(user_id=uid).order_by(MealPlan.week_start.desc())
     return paginate(query, request, serializer=lambda meal_plan: meal_plan.to_dict())
 
@@ -63,7 +63,7 @@ def list_meal_plans():
 @api_bp.post("/meal_plans")
 @jwt_required()
 def create_meal_plan():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     data = request.get_json() or {}
     week_start_s = data.get("week_start")  # "YYYY-MM-DD"
     if not week_start_s:
@@ -81,7 +81,7 @@ def create_meal_plan():
 @api_bp.get("/meal_plans/<int:meal_plan_id>")
 @jwt_required()
 def get_meal_plan(meal_plan_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     meal_plan = MealPlan.query.filter_by(id=meal_plan_id, user_id=uid).first_or_404()
     return meal_plan.to_dict(include_items=True, include_shopping=True)
 
@@ -89,7 +89,7 @@ def get_meal_plan(meal_plan_id):
 @api_bp.delete("/meal_plans/<int:meal_plan_id>")
 @jwt_required()
 def delete_meal_plan(meal_plan_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     meal_plan = MealPlan.query.filter_by(id=meal_plan_id, user_id=uid).first_or_404()
     db.session.delete(meal_plan)
     db.session.commit()
@@ -100,7 +100,7 @@ def delete_meal_plan(meal_plan_id):
 @api_bp.post("/meal_items")
 @jwt_required()
 def create_meal_item():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     data = request.get_json() or {}
     meal_plan = MealPlan.query.filter_by(id=data.get("meal_plan_id"), user_id=uid).first_or_404()
     meal_item = MealItem(meal_plan_id=meal_plan.id, recipe_id=data.get("recipe_id"), day=data.get("day"), meal_type=data.get("meal_type"))
@@ -112,7 +112,7 @@ def create_meal_item():
 @api_bp.patch("/meal_items/<int:meal_item_id>")
 @jwt_required()
 def update_meal_item(meal_item_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     meal_item = MealItem.query.join(MealPlan).filter(MealItem.id==meal_item_id, MealPlan.user_id==uid).first_or_404()
     data = request.get_json() or {}
     if "recipe_id" in data:
@@ -128,7 +128,7 @@ def update_meal_item(meal_item_id):
 @api_bp.delete("/meal_items/<int:meal_item_id>")
 @jwt_required()
 def delete_meal_item(meal_item_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     meal_item = MealItem.query.join(MealPlan).filter(MealItem.id==meal_item_id, MealPlan.user_id==uid).first_or_404()
     db.session.delete(meal_item)
     db.session.commit()
@@ -139,7 +139,7 @@ def delete_meal_item(meal_item_id):
 @api_bp.get("/shopping_items")
 @jwt_required()
 def list_shopping_items():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     meal_plan_id = request.args.get("meal_plan_id", type=int)
     query = ShoppingItem.query.join(MealPlan).filter(MealPlan.user_id==uid)
     if meal_plan_id:
@@ -150,7 +150,7 @@ def list_shopping_items():
 @api_bp.post("/shopping_items")
 @jwt_required()
 def create_shopping_item():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     data = request.get_json() or {}
     meal_plan = MealPlan.query.filter_by(id=data.get("meal_plan_id"), user_id=uid).first_or_404()
     shopping_item = ShoppingItem(meal_plan_id=meal_plan.id, name=data.get("name"), quantity=data.get("quantity"))
@@ -162,7 +162,7 @@ def create_shopping_item():
 @api_bp.patch("/shopping_items/<int:shopping_item_id>")
 @jwt_required()
 def update_shopping_item(shopping_item_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     shopping_item = ShoppingItem.query.join(MealPlan).filter(ShoppingItem.id==shopping_item_id, MealPlan.user_id==uid).first_or_404()
     data = request.get_json() or {}
     if "name" in data:
@@ -178,7 +178,7 @@ def update_shopping_item(shopping_item_id):
 @api_bp.delete("/shopping_items/<int:shopping_item_id>")
 @jwt_required()
 def delete_shopping_item(shopping_item_id):
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     shopping_item = ShoppingItem.query.join(MealPlan).filter(ShoppingItem.id==shopping_item_id, MealPlan.user_id==uid).first_or_404()
     db.session.delete(shopping_item)
     db.session.commit()
@@ -236,6 +236,8 @@ def generate_shopping(plan_id):
 @jwt_required()
 def recipes_search():
     from .recipes_api import search_recipes 
+    from flask import current_app, request
+
     q = (request.args.get("q") or "").strip()
     page = max(1, int(request.args.get("page", 1) or 1))
     per = max(1, min(50, int(request.args.get("per_page", 10) or 10)))
@@ -249,16 +251,28 @@ def recipes_search():
             "pages": 0,
         }, 200
     
-    offset = (page - 1) * per
-    data = search_recipes(q, offset=offset, number=per)
-    # return in your paginator shape
-    return {
-        "items": data["items"],
-        "page": page,
-        "per_page": per,
-        "total": data["total"],
-        "pages": (data["total"] + per - 1) // per
-    }
+    try:
+        offset = (page - 1) * per
+        data = search_recipes(q, offset=offset, number=per)
+        return {
+            "items": data["items"],
+            "page": page,
+            "per_page": per,
+            "total": data["total"],
+            "pages": (data["total"] + per - 1) // per,
+        }, 200
+    except Exception:
+        current_app.logger.exception("recipes_search failed")
+        return {
+            "error": "SEARCH_UPSTREAM_ERROR",
+            "message": "Failed to fetch recipes from provider.",
+            "items": [],
+            "page": page,
+            "per_page": per,
+            "total": 0,
+            "pages": 0,
+        }, 502
+
 
 @api_bp.get("/recipes/<provider>/<external_id>")
 @jwt_required()
@@ -271,7 +285,7 @@ def recipe_detail(provider, external_id):
 @jwt_required()
 def add_external_meal_item():
     from .recipes_api import get_recipe_detail 
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     data = request.get_json() or {}
     meal_plan_id = data.get("meal_plan_id")
 

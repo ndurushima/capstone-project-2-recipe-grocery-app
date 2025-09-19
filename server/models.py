@@ -88,7 +88,7 @@ class MealItem(db.Model):
     meal_type = db.Column(db.String(20), nullable=False)
 
     def to_dict(self):
-        return {
+        data = {
             "id": self.id,
             "meal_plan_id": self.meal_plan_id,
             "recipe_id": self.recipe_id,
@@ -101,6 +101,10 @@ class MealItem(db.Model):
             "meal_type": self.meal_type,
             "recipe": self.recipe.to_dict() if self.recipe else None,
         }
+    
+        data["title"] = (self.recipe.title if self.recipe else self.external_title) or ""
+        data["image"] = (getattr(self.recipe, "image", None) if self.recipe else self.external_image) or None
+        return data
 
     
 

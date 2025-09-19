@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TYPES = ["breakfast", "lumch", "dinner", "snack"];
+const TYPES = ["breakfast", "lunch", "dinner", "snack"];
 
 export default function MealCalendar() {
     const [plans, setPlans] = useState([]);
@@ -95,15 +95,23 @@ function PlanGrid({ mealPlanId }) {
 }
 
 function MealCell({ day, type, items, recipes, onAdd }) {
-    return (
-        <div>
-            <ul>
-                {items.map(i => <li key={i.id}>{i.recipe?.title || "(no recipe)"}</li>)}
-            </ul>
-            <select onChange={e => e.target.value && onAdd(day, type, Number(e.target.value))} defaultValue="">
-                <option value="" disabled>Add recipe...</option>
-                {recipes.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
-            </select>
-        </div>
-    );
+  return (
+    <div>
+      <ul>
+        {items.map(i => (
+          <li key={i.id}>{i.title || "(no recipe)"}</li>
+        ))}
+      </ul>
+
+      <select
+        onChange={e => e.target.value && onAdd(day, type, Number(e.target.value))}
+        defaultValue=""
+      >
+        <option value="" disabled>Add recipe...</option>
+        {recipes.map(r => (
+          <option key={r.id} value={r.id}>{r.title}</option>
+        ))}
+      </select>
+    </div>
+  );
 }
