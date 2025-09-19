@@ -11,6 +11,7 @@ export default function RecipeCatalog() {
   const [per] = useState(10);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [didSearch, setDidSearch] = useState(false);
 
   // selection to place a found recipe onto a plan
   const [planId, setPlanId] = useState(""); // user types their meal_plan_id
@@ -21,27 +22,39 @@ export default function RecipeCatalog() {
   async function load(p = 1) {
     setLoading(true);
     try {
-      const data = await api
-        .get("recipes/search", {
-          searchParams: { q: term || "", page: p, per_page: per },
-        })
-        .json();
+      const hasQuery = term.trim().length > 0;
+
+      const searchParams = {
+        page: p,
+        per_page: per,
+        ...(hasQuery ? { q: term.trim() } : {}),
+      };
+
+      const endpoint = hasQuery ? "recipes/search" : "recipes";
+
+      const data = await api.get(endpoint, { searchParams }).json();
+
       setResults(data.items || []);
       setPage(data.page || p);
-      setTotal(data.total || 0);
+      setTotal(Number.isFinite(data.total) ? data.total : 0);
+    } catch (e) {
+      console.error("Failed to load recipes:", e);
+      setResults([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    // initial empty search (or auto-run a default like "chicken")
     load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function onSubmitSearch(e) {
     e.preventDefault();
+    setDidSearch(true); 
+    setPage(1);
     load(1);
   }
 

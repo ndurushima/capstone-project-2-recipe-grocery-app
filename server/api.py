@@ -239,6 +239,16 @@ def recipes_search():
     q = (request.args.get("q") or "").strip()
     page = max(1, int(request.args.get("page", 1) or 1))
     per = max(1, min(50, int(request.args.get("per_page", 10) or 10)))
+
+    if not q:
+        return {
+            "items": [],
+            "page": page,
+            "per_page": per,
+            "total": 0,
+            "pages": 0,
+        }, 200
+    
     offset = (page - 1) * per
     data = search_recipes(q, offset=offset, number=per)
     # return in your paginator shape

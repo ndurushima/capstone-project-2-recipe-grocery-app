@@ -23,7 +23,7 @@ export default function LoginPage() {
         <div style={{ padding: 16 }}>
             <h2>Login</h2>
             <form onSubmit={onSubmit} style={{ display: "grid", gap: 8, maxWidth: 360 }}>
-                {error && <div stype={{ color: "red" }}>{error}</div>}
+                {error && <div style={{ color: "red" }}>{error}</div>}
                 <input name="email" placeholder="email" />
                 <input name="password" type="password" placeholder="password" />
                 <button>Login</button>

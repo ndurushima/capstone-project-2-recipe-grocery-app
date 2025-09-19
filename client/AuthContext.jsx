@@ -30,15 +30,29 @@ export default function AuthProvider({ children }) {
 
     const login = async (email, password) => {
         const data = await api.post("auth/login", { json: { email, password } }).json();
-        localStorage.setItem("token", data.token);
-        setUser(data.user);
+        const token = data.token || data.access_token;
+        if (!token) throw new Error("No token returned");
+        localStorage.setItem("token", token);
+        try {
+            const me = await api.get("me").json();
+            setUser(me);
+        } catch {
+            setUser(data.user ?? null);
+        }
     };
 
 
     const signup = async (email, username, password) => {
         const data = await api.post("auth/signup", { json: { email, username, password } }).json();
-        localStorage.setItem("token", data.token);
-        setUser(data.user);
+        const token = data.token || data.access_token;
+        if (!token) throw new Error("No token returned");
+        localStorage.setItem("token", token);
+        try {
+            const me = await api.get("me").json();
+            setUser(me);
+        } catch {
+            setUser(data.user ?? null);
+        }
     };
 
 
