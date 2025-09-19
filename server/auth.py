@@ -50,4 +50,4 @@ def login():
 def me():
     uid = get_jwt_identity()
     user = User.query.get_or_404(uid)
-    return user.dict(), 200
+    return user.to_dict(), 200

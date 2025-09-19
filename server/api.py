@@ -3,7 +3,6 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from .extensions import db
 from .models import Recipe, MealPlan, MealItem, ShoppingItem, User
 from .pagination import paginate
-from .recipes_api import search_recipes, get_recipe_detail
 import json
 from datetime import date
 
@@ -236,6 +235,7 @@ def generate_shopping(plan_id):
 @api_bp.get("/recipes/search")
 @jwt_required()
 def recipes_search():
+    from .recipes_api import search_recipes 
     q = (request.args.get("q") or "").strip()
     page = max(1, int(request.args.get("page", 1) or 1))
     per = max(1, min(50, int(request.args.get("per_page", 10) or 10)))
@@ -253,13 +253,14 @@ def recipes_search():
 @api_bp.get("/recipes/<provider>/<external_id>")
 @jwt_required()
 def recipe_detail(provider, external_id):
-    # Only spoonacular shown, but provider param allows future sources
+    from .recipes_api import get_recipe_detail 
     detail = get_recipe_detail(external_id)
     return detail
 
 @api_bp.post("/meal_items/external")
 @jwt_required()
 def add_external_meal_item():
+    from .recipes_api import get_recipe_detail 
     uid = get_jwt_identity()
     data = request.get_json() or {}
     meal_plan_id = data.get("meal_plan_id")

@@ -1,6 +1,6 @@
 from math import ceil
 
-def paginate(query, req):
+def paginate(query, req, serializer=lambda x: x.to_dict()):
     try:
         page = int(req.args.get("page", 1))
     except (TypeError, ValueError):
@@ -15,8 +15,9 @@ def paginate(query, req):
 
     # Fetch results
     items = query.limit(per_page).offset((page - 1) * per_page).all()
-
     total = query.order_by(None).count()
+
+    pages = ceil(total / per_page) if total else 0
 
     data = {
         "items": [i.to_dict() for i in items],
@@ -25,4 +26,8 @@ def paginate(query, req):
         "total": total,
         "pages": ceil(total / per_page) if total else 0,
     }
-    return data, 200
+    
+    return {
+        "items": [serializer(i) for i in items],
+        "page": page, "per_page": per_page, "total": total, "pages": pages
+    }, 200
