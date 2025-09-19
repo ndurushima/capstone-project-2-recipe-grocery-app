@@ -9,7 +9,14 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
 
-    CORS(app, resources={r"/*": {"origins": app.config.get("CORS_ORIGINS", "*")}}, supports_credentials=True)
+    CORS(
+        app,
+        origins=["http://localhost:5173"],
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        expose_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    )
 
 
     bcrypt.init_app(app)

@@ -6,7 +6,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True, nullable=False)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    _password_hash = db.Column(db.String(100), nullable=False)
+    _password_hash = db.Column(db.String(255), nullable=False)
 
     recipes = db.relationship("Recipe", backref="user", cascade="all, delete-orphan")
     meal_plans = db.relationship("MealPlan", backref="user", cascade="all, delete-orphan")
@@ -16,11 +16,11 @@ class User(db.Model):
         raise AttributeError("Password hashes may not be viewed.")
     
     @password_hash.setter
-    def password_hash(self, password):
-        self._password_hash = bcrypt.generate_password_hash(password.encode("utf-8")).decode("utf-8")
+    def password_hash(self, password: str):
+        self._password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
 
-    def authenticate(self, pw):
-        return bcrypt.check_password_hash(self._password_hash, pw.encode("utf-8"))
+    def authenticate(self, pw: str) -> bool:
+        return bcrypt.check_password_hash(self._password_hash, pw)
 
     def to_dict(self):
         return {
@@ -74,23 +74,34 @@ class MealItem(db.Model):
     __tablename__ = "meal_items"
     id = db.Column(db.Integer, primary_key=True)
     meal_plan_id = db.Column(db.Integer, db.ForeignKey("meal_plans.id"), nullable=False)
-    recipe_id = db.Column(db.Integer, db.ForeignKey("recipes.id"), nullable=True)
-    day = db.Column(db.String(10), nullable=False) 
 
-    # breakfast/lunch/dinner/snack
-    meal_type = db.Column(db.String(20), nullable=False) 
-    
+    recipe_id = db.Column(db.Integer, db.ForeignKey("recipes.id"), nullable=True)
     recipe = db.relationship("Recipe")
+
+    external_provider = db.Column(db.String(50))
+    external_id = db.Column(db.String(100))
+    external_title = db.Column(db.String(300))
+    external_image = db.Column(db.String(500))
+    ingredient_snapshot = db.Column(db.Text)
+
+    day = db.Column(db.String(10), nullable=False)
+    meal_type = db.Column(db.String(20), nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id,
             "meal_plan_id": self.meal_plan_id,
             "recipe_id": self.recipe_id,
+            "external_provider": self.external_provider,
+            "external_id": self.external_id,
+            "external_title": self.external_title,
+            "external_image": self.external_image,
+            "ingredient_snapshot": self.ingredient_snapshot,
             "day": self.day,
             "meal_type": self.meal_type,
-            "recipe": self.recipe.to_dict() if self.recipe else None
+            "recipe": self.recipe.to_dict() if self.recipe else None,
         }
+
     
 
 class ShoppingItem(db.Model):
@@ -109,4 +120,15 @@ class ShoppingItem(db.Model):
             "quantity": self.quantity,
             "checked": self.checked
         }
+
+class ExternalRecipe(db.Model):
+    __tablename__ = "external_recipes"
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(50), nullable=False)     # "spoonacular"
+    external_id = db.Column(db.String(100), nullable=False) # API’s recipe id
+    title = db.Column(db.String(300), nullable=False)
+    image = db.Column(db.String(500))
+    # optional: brief summary, cuisine, etc.
+
+    __table_args__ = (db.UniqueConstraint("provider", "external_id"),)
 

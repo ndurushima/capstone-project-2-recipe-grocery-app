@@ -1,8 +1,11 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from .extensions import db
 from .models import Recipe, MealPlan, MealItem, ShoppingItem, User
 from .pagination import paginate
+from .recipes_api import search_recipes, get_recipe_detail
+import json
+from datetime import date
 
 
 api_bp = Blueprint("api", __name__)
@@ -63,7 +66,13 @@ def list_meal_plans():
 def create_meal_plan():
     uid = get_jwt_identity()
     data = request.get_json() or {}
-    week_start = data.get("week_start") # ISO date string
+    week_start_s = data.get("week_start")  # "YYYY-MM-DD"
+    if not week_start_s:
+        return {"error": "week_start is required (YYYY-MM-DD)"}, 400
+    try:
+        week_start = date.fromisoformat(week_start_s)
+    except ValueError:
+        return {"error": "week_start must be YYYY-MM-DD"}, 400
     meal_plan = MealPlan(user_id=uid, week_start=week_start)
     db.session.add(meal_plan)
     db.session.commit()
@@ -103,9 +112,9 @@ def create_meal_item():
 
 @api_bp.patch("/meal_items/<int:meal_item_id>")
 @jwt_required()
-def update_meal_item(miid):
+def update_meal_item(meal_item_id):
     uid = get_jwt_identity()
-    meal_item = MealItem.query.join(MealPlan).filter(MealItem.id==miid, MealPlan.user_id==uid).first_or_404()
+    meal_item = MealItem.query.join(MealPlan).filter(MealItem.id==meal_item_id, MealPlan.user_id==uid).first_or_404()
     data = request.get_json() or {}
     if "recipe_id" in data:
         meal_item.recipe_id = data["recipe_id"]
@@ -178,30 +187,104 @@ def delete_shopping_item(shopping_item_id):
 
 
 # ------- Utility: Generate Shopping List from Meal Plan -------
-@api_bp.post("/meal_plans/<int:meal_plan_id>/generate_list")
+@api_bp.post("/meal_plans/<int:plan_id>/generate_shopping")
 @jwt_required()
-def generate_list(meal_plan_id):
-    uid = get_jwt_identity()
-    meal_plan = MealPlan.query.filter_by(id=meal_plan_id, user_id=uid).first_or_404()
+def generate_shopping(plan_id):
+    meal_plan = MealPlan.query.get_or_404(plan_id)
 
-    # naive implementation: aggregate newline-separated ingredients from each recipe
-    from collections import Counter
-    bucket = Counter()
-
-    for item in meal_plan.items:
-        if item.recipe and item.recipe.ingredients:
-            for line in item.recipe.ingredients.splitlines():
+    # collect ingredients
+    items = []
+    for mi in meal_plan.items:
+        if mi.ingredient_snapshot:  # external recipe
+            items.extend(json.loads(mi.ingredient_snapshot))
+        elif mi.recipe:  # local recipe (legacy support)
+            for line in mi.recipe.ingredients.splitlines():
                 name = line.strip()
                 if name:
-                    bucket[name] += 1
+                    items.append({"name": name, "quantity": ""})
 
+    # dedupe
+    dedup = {}
+    for it in items:
+        key = it["name"].strip().lower()
+        if key in dedup:
+            if it["quantity"]:
+                dedup[key]["quantity"] = (
+                    dedup[key]["quantity"] + " + " + it["quantity"]
+                ).strip(" +")
+        else:
+            dedup[key] = {"name": it["name"], "quantity": it.get("quantity", "")}
 
-    # Upsert into ShoppingItem (simple: clear then insert)
-    ShoppingItem.query.filter_by(meal_plan_id=meal_plan.id).delete()
-    for name, count in bucket.items():
-        shopping_item = ShoppingItem(meal_plan_id=meal_plan.id, name=name, quantity=str(count))
-        db.session.add(shopping_item)
+    shopping = list(dedup.values())
+
+    # clear old shopping items
+    ShoppingItem.query.filter_by(meal_plan_id=plan_id).delete()
+
+    # save new shopping items
+    for it in shopping:
+        db.session.add(
+            ShoppingItem(
+                meal_plan_id=plan_id,
+                name=it["name"],
+                quantity=it["quantity"],
+            )
+        )
     db.session.commit()
 
+    return jsonify([s.to_dict() for s in meal_plan.shopping_items])
 
-    return meal_plan.to_dict(include_shopping=True)
+@api_bp.get("/recipes/search")
+@jwt_required()
+def recipes_search():
+    q = (request.args.get("q") or "").strip()
+    page = max(1, int(request.args.get("page", 1) or 1))
+    per = max(1, min(50, int(request.args.get("per_page", 10) or 10)))
+    offset = (page - 1) * per
+    data = search_recipes(q, offset=offset, number=per)
+    # return in your paginator shape
+    return {
+        "items": data["items"],
+        "page": page,
+        "per_page": per,
+        "total": data["total"],
+        "pages": (data["total"] + per - 1) // per
+    }
+
+@api_bp.get("/recipes/<provider>/<external_id>")
+@jwt_required()
+def recipe_detail(provider, external_id):
+    # Only spoonacular shown, but provider param allows future sources
+    detail = get_recipe_detail(external_id)
+    return detail
+
+@api_bp.post("/meal_items/external")
+@jwt_required()
+def add_external_meal_item():
+    uid = get_jwt_identity()
+    data = request.get_json() or {}
+    meal_plan_id = data.get("meal_plan_id")
+
+    meal_plan = MealPlan.query.filter_by(id=meal_plan_id, user_id=uid).first_or_404()
+    
+    day = data.get("day")
+    meal_type = data.get("meal_type")
+    provider = data.get("provider") or "spoonacular"
+    external_id = str(data.get("external_id"))
+
+    # fetch details and snapshot ingredients
+    detail = get_recipe_detail(external_id)
+    snapshot = json.dumps(detail["ingredients"])  # store list of {name,quantity}
+
+    mi = MealItem(
+        meal_plan_id=meal_plan.id,
+        day=day,
+        meal_type=meal_type,
+        external_provider=provider,
+        external_id=external_id,
+        external_title=detail["title"],
+        external_image=detail.get("image"),
+        ingredient_snapshot=snapshot,
+    )
+    db.session.add(mi)
+    db.session.commit()
+    return mi.to_dict(), 201

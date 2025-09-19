@@ -13,7 +13,9 @@ export default function AuthProvider({ children }) {
 
 
     useEffect(() => {
-        async function load() {
+        (async () => {
+            const token = localStorage.getItem("token");
+            if (!token) { setUser(null); setLoading(false); return; }
             try {
                 const me = await api.get("auth/me").json();
                 setUser(me);
@@ -22,8 +24,7 @@ export default function AuthProvider({ children }) {
             } finally {
                 setLoading(false);
             }
-        }
-        load();
+        })();
     }, []);
 
 
