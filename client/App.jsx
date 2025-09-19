@@ -1,3 +1,4 @@
+import React from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import AuthProvider, { useAuth } from "./AuthContext";
 import RecipeCatalog from "./components/RecipeCatalog.jsx";
@@ -17,7 +18,7 @@ function PrivateRoute({ children }) {
 export default function App() {
     const { user, logout } = useAuth();
     return (
-        <AuthProvider>
+        <>
             <header style={{ display: "flex", gap: 12, padding: 12, borderBottom: "1px solid #eee" }}>
                 <Link to="/">Recipes</Link>
                 <Link to="/calendar">Meal Plan</Link>
@@ -43,6 +44,6 @@ export default function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
             </Routes>
-        </AuthProvider>
+        </>
     );
 }
