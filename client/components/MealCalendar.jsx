@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useToast } from "../toast/ToastContext";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -8,6 +9,7 @@ export default function MealCalendar({ planId }) {
   const [plan, setPlan] = useState(null);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { push } = useToast();
 
   // Load current plan (with items) and the user's local recipes
   async function loadPlan() {
@@ -46,6 +48,7 @@ export default function MealCalendar({ planId }) {
       }).json();
       // Refresh so the newly added item appears immediately
       await loadPlan();
+      push("Recipe added to plan.", { type: "success" });
     } catch (err) {
       let msg = "Failed to add recipe.";
       try {
@@ -55,7 +58,17 @@ export default function MealCalendar({ planId }) {
         }
       } catch {}
       console.error("Add recipe failed:", err);
-      alert(msg);
+      push(msg, { type: "error" });
+    }
+  };
+
+  const onDelete = async (mealItemId) => {
+    try {
+      await api.delete(`meal_items/${mealItemId}`).json();
+      await loadPlan();
+      push("Removed from plan.", { type: "success" });
+    } catch (err) {
+      push("Failed to remove item.", { type: "error" });
     }
   };
 
@@ -100,6 +113,7 @@ export default function MealCalendar({ planId }) {
                 items={itemsForCell(d, mt)}
                 recipes={recipes}
                 onAdd={onAdd}
+                onDelete={onDelete}
               />
             ))}
           </React.Fragment>
@@ -110,7 +124,7 @@ export default function MealCalendar({ planId }) {
 }
 
 /** Cell component: shows items + a dropdown to add a local recipe */
-function MealCell({ day, type, items, recipes, onAdd }) {
+function MealCell({ day, type, items, recipes, onAdd, onDelete }) {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -128,16 +142,36 @@ function MealCell({ day, type, items, recipes, onAdd }) {
 
   return (
     <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>
-      <ul style={{ margin: 0, paddingLeft: 18 }}>
+      <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4 }}>
         {items.map((i) => {
           const title =
             i.title || i.external_title || i.recipe?.title || "(no recipe)";
-        // If you want, add a small delete button here using your DELETE /meal_items/:id route
-          return <li key={i.id}>{title}</li>;
+          const img = i.image || i.external_image || i.recipe?.image;
+          return (
+            <li key={i.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {img ? (
+                <img
+                  src={img} 
+                  alt=""
+                  width={28}
+                  height={28}
+                  style={{ objectFit: "cover", borderRadius: 4, flex: "0 0 auto" }}
+                />
+              ) : null}
+              <span style={{ flex: 1 }}>{title}</span>
+              <button
+                onClick={() => onDelete(i.id)}
+                title="Remove"
+                style={{ border: "1px solid #eee", background: "#fafafa", borderRadius: 4, padding: "2px 6px" }}
+              >
+                x
+              </button>
+            </li>
+          )
         })}
       </ul>
 
-      <select
+      {/* <select
         value={value}
         onChange={handleChange}
         disabled={saving || recipes.length === 0}
@@ -151,7 +185,7 @@ function MealCell({ day, type, items, recipes, onAdd }) {
             {r.title}
           </option>
         ))}
-      </select>
+      </select> */}
     </div>
   );
 }

@@ -277,9 +277,40 @@ def recipes_search():
 @api_bp.get("/recipes/<provider>/<external_id>")
 @jwt_required()
 def recipe_detail(provider, external_id):
-    from .recipes_api import get_recipe_detail 
-    detail = get_recipe_detail(external_id)
-    return detail
+    from .recipes_api import get_recipe_detail
+    raw = get_recipe_detail(external_id)
+
+    # Normalize common fields
+    title = raw.get("title") or raw.get("name") or ""
+    image = raw.get("image") or raw.get("imageUrl")
+
+    # Ingredients: prefer our canonical [{name, quantity}]
+    ingredients = raw.get("ingredients")
+    if ingredients is None and "extendedIngredients" in raw:
+        ingredients = [
+            {
+                "name": (i.get("originalName") or i.get("name") or "").strip(),
+                "quantity": (i.get("original") or "").strip(),
+            }
+            for i in (raw.get("extendedIngredients") or [])
+        ]
+
+    # Steps: support multiple upstream shapes
+    steps = raw.get("steps") or raw.get("instructions")
+    if not steps and isinstance(raw.get("analyzedInstructions"), list):
+        collected = []
+        for block in raw["analyzedInstructions"]:
+            for s in block.get("steps", []):
+                if s.get("step"):
+                    collected.append(s["step"])
+        steps = "\n\n".join(collected)
+
+    return {
+        "title": title,
+        "image": image,
+        "ingredients": ingredients or [],
+        "steps": steps or "",
+    }, 200
 
 @api_bp.post("/meal_items/external")
 @jwt_required()

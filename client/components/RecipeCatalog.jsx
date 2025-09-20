@@ -1,7 +1,8 @@
+// src/components/RecipeCatalog.jsx
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useToast } from "../toast/ToastContext";
-
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -17,27 +18,36 @@ export default function RecipeCatalog() {
   const [addingId, setAddingId] = useState(null);
   const { push } = useToast();
 
-  // selection to place a found recipe onto a plan
-  const [planId, setPlanId] = useState(""); // user types their meal_plan_id
+  const [planId, setPlanId] = useState("");
   const [day, setDay] = useState(DAYS[0]);
-  const [mealType, setMealType] = useState(MEAL_TYPES[2]); // default dinner
+  const [mealType, setMealType] = useState(MEAL_TYPES[2]);
   const pages = Math.max(1, Math.ceil(total / per));
+
+  const navigate = useNavigate();
+
+  function detailHref(r) {
+    // External results have provider/external_id. Local results (from /recipes) have id.
+    if (r.external_id != null) {
+      const provider = r.provider || "spoonacular";
+      return `/recipe/external/${provider}/${r.external_id}`;
+    }
+    if (r.id != null) {
+      return `/recipe/local/${r.id}`;
+    }
+    return null;
+  }
 
   async function load(p = 1) {
     setLoading(true);
     try {
       const hasQuery = term.trim().length > 0;
-
       const searchParams = {
         page: p,
         per_page: per,
         ...(hasQuery ? { q: term.trim() } : {}),
       };
-
       const endpoint = hasQuery ? "recipes/search" : "recipes";
-
       const data = await api.get(endpoint, { searchParams }).json();
-
       setResults(data.items || []);
       setPage(data.page || p);
       setTotal(Number.isFinite(data.total) ? data.total : 0);
@@ -57,38 +67,43 @@ export default function RecipeCatalog() {
 
   function onSubmitSearch(e) {
     e.preventDefault();
-    setDidSearch(true); 
+    setDidSearch(true);
     setPage(1);
     load(1);
   }
 
   async function addToPlan(r) {
     if (!planId) {
-      push("Enter a meal_plan_id first."), { type: "error" };
+      push("Enter a meal_plan_id first.", { type: "error" });
       return;
     }
     try {
-        setAddingId(`${r.provider || "spoonacular"}:${r.external_id}`);
-        await api.post("meal_items/external", {
-            json: {
+      setAddingId(`${r.provider || "spoonacular"}:${r.external_id}`);
+      await api
+        .post("meal_items/external", {
+          json: {
             meal_plan_id: Number(planId),
             day,
             meal_type: mealType,
             provider: r.provider || "spoonacular",
             external_id: r.external_id,
-            },
-        }).json();
-      push(`Added "${r.title}" to plan ${planId} (${day} ${mealType})`, { type: "success" });
+          },
+        })
+        .json();
+      push(`Added "${r.title}" to plan ${planId} (${day} ${mealType})`, {
+        type: "success",
+      });
     } catch (err) {
       console.error(err);
       let msg = "Failed to add to plan.";
       try {
         const body = await err.response?.json();
-        if (body?.error || body?.message) msg += ` ${body.error ?? ""} ${body.message ?? ""}`.trim();
+        if (body?.error || body?.message)
+          msg += ` ${body.error ?? ""} ${body.message ?? ""}`.trim();
       } catch {}
       push(msg, { type: "error" });
     } finally {
-        setAddingId(null);
+      setAddingId(null);
     }
   }
 
@@ -127,10 +142,7 @@ export default function RecipeCatalog() {
         </label>
         <label style={{ display: "grid", gap: 4 }}>
           <span>Meal Type</span>
-          <select
-            value={mealType}
-            onChange={(e) => setMealType(e.target.value)}
-          >
+          <select value={mealType} onChange={(e) => setMealType(e.target.value)}>
             {MEAL_TYPES.map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -164,33 +176,84 @@ export default function RecipeCatalog() {
           gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
         }}
       >
-        {results.map((r) => (
-          <div
-            key={`${r.provider || "spoonacular"}:${r.external_id}`}
-            style={{
-              border: "1px solid #e5e5e5",
-              borderRadius: 8,
-              padding: 12,
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            {r.image ? (
-              <img
-                src={r.image}
-                alt={r.title}
-                style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 6 }}
-              />
-            ) : null}
-            <div style={{ fontWeight: 600 }}>{r.title}</div>
-            <button
-               onClick={() => addToPlan(r)}
-               disabled={addingId === `${r.provider || "spoonacular"}:${r.external_id}`}
+        {results.map((r) => {
+          const key =
+            r.external_id != null
+              ? `ext:${r.provider || "spoonacular"}:${r.external_id}`
+              : `local:${r.id}`;
+
+          return (
+            <div
+              key={key}
+              style={{
+                border: "1px solid #e5e5e5",
+                borderRadius: 8,
+                padding: 12,
+                display: "grid",
+                gap: 8,
+              }}
             >
-               {addingId === `${r.provider || "spoonacular"}:${r.external_id}` ? "Adding…" : "Add to Meal Plan"}
-            </button>
-          </div>
-        ))}
+              {/* Single, clickable image */}
+              {r.image ? (
+                <div
+                  role="button"
+                  onClick={() => {
+                    const href = detailHref(r);
+                    if (href) navigate(href);
+                  }}
+                  title="View recipe"
+                  style={{ cursor: "pointer" }}
+                >
+                  <img
+                    src={r.image}
+                    alt={r.title}
+                    style={{
+                      width: "100%",
+                      height: 140,
+                      objectFit: "cover",
+                      borderRadius: 6,
+                    }}
+                    loading="lazy"
+                    onError={(e) => e.currentTarget.remove()}
+                  />
+                </div>
+              ) : null}
+
+              {/* Clickable title */}
+              <div
+                style={{ fontWeight: 600, cursor: "pointer" }}
+                onClick={() => {
+                  const href = detailHref(r);
+                  if (href) navigate(href);
+                }}
+                title="View recipe"
+              >
+                {r.title}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    const href = detailHref(r);
+                    if (href) navigate(href);
+                  }}
+                  title="View details"
+                >
+                  View
+                </button>
+
+                <button
+                  onClick={() => addToPlan(r)}
+                  disabled={addingId === `${r.provider || "spoonacular"}:${r.external_id}`}
+                >
+                  {addingId === `${r.provider || "spoonacular"}:${r.external_id}`
+                    ? "Adding…"
+                    : "Add to Meal Plan"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Pager */}

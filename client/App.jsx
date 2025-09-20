@@ -9,6 +9,7 @@ import PlanPage from "./pages/PlanPage.jsx";
 import PlansIndex from "./pages/PlansIndex.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import ToastProvider from "./toast/ToastContext";
+import RecipeDetailPage from "./pages/RecipeDetailPage.jsx";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -43,6 +44,10 @@ export default function App() {
         <Route path="/" element={<PrivateRoute><RecipeCatalog /></PrivateRoute>} />
         <Route path="/calendar" element={<PrivateRoute><CalendarPage /></PrivateRoute>} />
         <Route path="/shopping" element={<PrivateRoute><ShoppingList /></PrivateRoute>} />
+
+        <Route path="/recipe/external/:provider/:externalId" element={<PrivateRoute><RecipeDetailPage /></PrivateRoute>} />
+        <Route path="/recipe/local/:id" element={<PrivateRoute><RecipeDetailPage /></PrivateRoute>} />
+
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
 
