@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from .extensions import db
 from .models import Recipe, MealPlan, MealItem, ShoppingItem, User
 from .pagination import paginate
-import json
+import re, json
 from datetime import date
 from flask_cors import cross_origin
 
@@ -186,52 +186,128 @@ def delete_shopping_item(shopping_item_id):
     return {"ok": True}
 
 
-# ------- Utility: Generate Shopping List from Meal Plan -------
+# ---- Generate Shopping List (CORS-safe) ----
+
+# Preflight handler: no auth, just say "OK to POST with these headers"
+@api_bp.route("/meal_plans/<int:plan_id>/generate_shopping", methods=["OPTIONS"])
+@cross_origin(
+    origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["POST", "OPTIONS"],
+)
+def generate_shopping_preflight(plan_id):
+    return ("", 204)
+
+def _is_instruction_like(text: str) -> bool:
+    if not text:
+        return True
+    t = text.strip().lower()
+    # very long lines tend to be sentences/instructions
+    if len(t) > 120:
+        return True
+    # sentence punctuation is a strong hint
+    if "." in t:
+        return True
+    # common instruction words/contexts
+    VERBS = [
+        "preheat","bake","mix","stir","combine","roll","cut","arrange","place",
+        "serve","cool","heat","cook","simmer","bring","whisk","beat","drain",
+        "transfer","cover","uncover","reduce","increase","fold","sprinkle",
+        "spoon","pour","garnish","press","set aside","until","degree","oven",
+        "minutes","pan","skillet","bowl","sheet","line","grease","divide"
+    ]
+    if any(v in t for v in VERBS):
+        return True
+    # junky names we definitely don't want as items
+    if t in {"serving","servings"}:
+        return True
+    return False
+
+def _clean_name(name: str) -> str:
+    if not isinstance(name, str):
+        return ""
+    n = name.strip()
+    # strip bullets like '-', '*', '•'
+    n = re.sub(r'^[\-\*\u2022]\s*', "", n)
+    # collapse whitespace
+    n = re.sub(r'\s+', " ", n)
+    return n
+
 @api_bp.post("/meal_plans/<int:plan_id>/generate_shopping")
 @jwt_required()
+@cross_origin(
+    origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["POST", "OPTIONS"],
+)
 def generate_shopping(plan_id):
-    meal_plan = MealPlan.query.get_or_404(plan_id)
+    try:
+        uid = int(get_jwt_identity())
+        meal_plan = MealPlan.query.filter_by(id=plan_id, user_id=uid).first_or_404()
 
-    # collect ingredients
-    items = []
-    for mi in meal_plan.items:
-        if mi.ingredient_snapshot:  # external recipe
-            items.extend(json.loads(mi.ingredient_snapshot))
-        elif mi.recipe:  # local recipe (legacy support)
-            for line in mi.recipe.ingredients.splitlines():
-                name = line.strip()
-                if name:
-                    items.append({"name": name, "quantity": ""})
+        # 1) collect raw items (external snapshots preferred; local lines as fallback)
+        raw_items = []
+        for mi in meal_plan.items:
+            if mi.ingredient_snapshot:  # external recipe snapshot: list[{name, quantity}]
+                try:
+                    raw_items.extend(json.loads(mi.ingredient_snapshot) or [])
+                except Exception:
+                    current_app.logger.warning("Bad ingredient_snapshot on meal_item %s", mi.id)
+            elif mi.recipe:  # local recipe (legacy): split ingredients field by lines
+                for line in (mi.recipe.ingredients or "").splitlines():
+                    name = line.strip()
+                    if name:
+                        raw_items.append({"name": name, "quantity": ""})
 
-    # dedupe
-    dedup = {}
-    for it in items:
-        key = it["name"].strip().lower()
-        if key in dedup:
-            if it["quantity"]:
-                dedup[key]["quantity"] = (
-                    dedup[key]["quantity"] + " + " + it["quantity"]
-                ).strip(" +")
-        else:
-            dedup[key] = {"name": it["name"], "quantity": it.get("quantity", "")}
+        # 2) normalize + FILTER OUT instruction-like entries
+        MAX_NAME = 255
+        MAX_QTY  = 255
+        dedup = {}
+        for it in raw_items:
+            name = _clean_name(it.get("name") or "")
+            qty  = (it.get("quantity") or "").strip()
 
-    shopping = list(dedup.values())
+            if not name:
+                continue
+            if _is_instruction_like(name):
+                continue
 
-    # clear old shopping items
-    ShoppingItem.query.filter_by(meal_plan_id=plan_id).delete()
+            # also drop 'servings' in quantity; it's usually noise for shopping lists
+            ql = qty.lower()
+            if "serving" in ql:
+                qty = ""
 
-    # save new shopping items
-    for it in shopping:
-        db.session.add(
-            ShoppingItem(
-                meal_plan_id=plan_id,
-                name=it["name"],
-                quantity=it["quantity"],
+            # clip to avoid DB constraints
+            name = name[:MAX_NAME]
+            qty  = qty[:MAX_QTY]
+
+            key = name.lower()
+            if key in dedup:
+                if qty:
+                    dedup[key]["quantity"] = (
+                        (dedup[key]["quantity"] + " + " + qty).strip(" +")
+                    )[:MAX_QTY]
+            else:
+                dedup[key] = {"name": name, "quantity": qty}
+
+        # 3) replace existing items
+        ShoppingItem.query.filter_by(meal_plan_id=plan_id).delete()
+        for it in dedup.values():
+            db.session.add(
+                ShoppingItem(
+                    meal_plan_id=plan_id,
+                    name=it["name"],
+                    quantity=it["quantity"],
+                )
             )
-        )
-    db.session.commit()
+        db.session.commit()
 
-    return jsonify([s.to_dict() for s in meal_plan.shopping_items])
+        return jsonify([s.to_dict() for s in meal_plan.shopping_items]), 200
+
+    except Exception as e:
+        current_app.logger.exception("generate_shopping failed")
+        return jsonify({"error": "GENERATE_SHOPPING_FAILED", "message": str(e)}), 500
+
 
 @api_bp.get("/recipes/search")
 @jwt_required()

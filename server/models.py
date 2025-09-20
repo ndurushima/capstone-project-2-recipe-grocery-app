@@ -112,8 +112,8 @@ class ShoppingItem(db.Model):
     __tablename__ = "shopping_items"
     id = db.Column(db.Integer, primary_key=True)
     meal_plan_id = db.Column(db.Integer, db.ForeignKey("meal_plans.id"), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    quantity = db.Column(db.String(50))
+    name = db.Column(db.String(255), nullable=False)
+    quantity = db.Column(db.String(255))
     checked = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
