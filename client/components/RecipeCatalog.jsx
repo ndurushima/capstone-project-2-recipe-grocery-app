@@ -12,6 +12,7 @@ export default function RecipeCatalog() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [didSearch, setDidSearch] = useState(false);
+  const [addingId, setAddingId] = useState(null);
 
   // selection to place a found recipe onto a plan
   const [planId, setPlanId] = useState(""); // user types their meal_plan_id
@@ -64,19 +65,22 @@ export default function RecipeCatalog() {
       return;
     }
     try {
-      await api.post("meal_items/external", {
-        json: {
-          meal_plan_id: Number(planId),
-          day,
-          meal_type: mealType,
-          provider: r.provider || "spoonacular",
-          external_id: r.external_id,
-        },
-      }).json();
+        setAddingId(`${r.provider || "spoonacular"}:${r.external_id}`);
+        await api.post("meal_items/external", {
+            json: {
+            meal_plan_id: Number(planId),
+            day,
+            meal_type: mealType,
+            provider: r.provider || "spoonacular",
+            external_id: r.external_id,
+            },
+        }).json();
       alert(`Added "${r.title}" to plan ${planId} (${day} ${mealType})`);
     } catch (err) {
       console.error(err);
       alert("Failed to add to plan. Check console/server logs.");
+    } finally {
+        setAddingId(null);
     }
   }
 
@@ -171,7 +175,12 @@ export default function RecipeCatalog() {
               />
             ) : null}
             <div style={{ fontWeight: 600 }}>{r.title}</div>
-            <button onClick={() => addToPlan(r)}>Add to Meal Plan</button>
+            <button
+               onClick={() => addToPlan(r)}
+               disabled={addingId === `${r.provider || "spoonacular"}:${r.external_id}`}
+            >
+               {addingId === `${r.provider || "spoonacular"}:${r.external_id}` ? "Adding…" : "Add to Meal Plan"}
+            </button>
           </div>
         ))}
       </div>

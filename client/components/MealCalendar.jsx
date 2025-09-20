@@ -1,115 +1,155 @@
-import React from "react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TYPES = ["breakfast", "lunch", "dinner", "snack"];
+const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 
-export default function MealCalendar() {
-    const [plans, setPlans] = useState([]);
-    const [active, setActive] = useState(null);
+export default function MealCalendar({ planId }) {
+  const [plan, setPlan] = useState(null);
+  const [recipes, setRecipes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    async function loadPlans() {
-        const data = await api.get("meal_plans").json();
-        setPlans(data.items);
-        if (!active && data.items[0]) setActive(data.items[0]);
+  // Load current plan (with items) and the user's local recipes
+  async function loadPlan() {
+    const data = await api.get(`meal_plans/${planId}`).json();
+    setPlan(data);
+  }
+  async function loadRecipes() {
+    const data = await api.get("recipes", {
+      searchParams: { page: 1, per_page: 100 },
+    }).json();
+    setRecipes(data.items || []);
+  }
+
+  useEffect(() => {
+    if (!planId) return; 
+    (async () => {
+      setLoading(true);
+      try {
+        await Promise.all([loadPlan(), loadRecipes()]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [planId]);
+
+  // This is what the cell calls. It adds a *local* recipe to the plan.
+  const onAdd = async (day, mealType, recipeId) => {
+    try {
+      await api.post("meal_items", {
+        json: {
+          meal_plan_id: Number(planId),
+          recipe_id: Number(recipeId),
+          day,
+          meal_type: mealType,
+        },
+      }).json();
+      // Refresh so the newly added item appears immediately
+      await loadPlan();
+    } catch (err) {
+      let msg = "Failed to add recipe.";
+      try {
+        const body = await err.response?.json();
+        if (body?.error || body?.message) {
+          msg += ` ${body.error ?? ""} ${body.message ?? ""}`.trim();
+        }
+      } catch {}
+      console.error("Add recipe failed:", err);
+      alert(msg);
     }
+  };
 
-    useEffect(() => { loadPlans(); }, []);
+  if (loading || !plan) {
+    return <div style={{ padding: 16 }}>Loading plan…</div>;
+  }
 
-    async function createPlan(e) {
-        e.preventDefault();
-        const week_start = new FormData(e.currentTarget).get("week_start");
-        const mp = await api.post("meal_plans", { json: { week_start } }).json();
-        setPlans(p => [mp, ...p]);
-        setActive(mp);
-    }
+  // Helper to grab items for a specific cell
+  const itemsForCell = (day, type) =>
+    (plan.items || []).filter((i) => i.day === day && i.meal_type === type);
 
-    return (
-        <div style={{ padding: 16 }}>
-            <h2>Meal Plan</h2>
-            <form onSubmit={createPlan}>
-                <input type="date" name="week_start" required />
-                <button>Create</button>
-            </form>
-            
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                {plans.map(p => (
-                    <button key={p.id} onClick={() => setActive(p)}>
-                        {p.week_start}
-                    </button>
-                ))}
-            </div>
-            {active && <PlanGrid mealPlanId={active.id} />}
-        </div>
-    );
-}
-
-function PlanGrid({ mealPlanId }) {
-    const [items, setItems] = useState([]);
-    const [recipes, setRecipes] = useState([]);
-
-    async function load() {
-        const mp = await api.get(`meal_plans/${mealPlanId}`).json();
-        setItems(mp.items || []);
-        const recs = await api.get("recipes?per_page=100").json();
-        setRecipes(recs.items || []);
-    }
-    useEffect(() => { load(); }, [mealPlanId]);
-
-    async function add(day, meal_type, recipe_id) {
-        const mi = await api.post("meal_items", { json: { meal_plan_id: mealPlanId, day, meal_type, recipe_id } }).json();
-        setItems(prev => [...prev, mi]);
-    }
-
-    async function generateList() {
-        await api.post(`meal_plans/${mealPlanId}/generate_list`).json();
-        alert("Shopping list generated!");
-    }
-
-    return (
-        <div style={{ marginTop: 16 }}>
-            <button onClick={generateList}>Generate Shopping List</button>
-            <table style={{ width: "100%", marginTop: 12 }}>
-                <thead>
-                    <tr>
-                        <th>Day</th>
-                        {TYPES.map(t => <th key={t}>{t}</th>)}
-                    </tr>
-                </thead>
-                <tbody>
-                    {DAYS.map(d => (
-                        <tr key={d}>
-                            <td>{d}</td>
-                            {TYPES.map(t => (
-                                <td key={t}>
-                                    <MealCell day={d} type={t} items={items.filter(i => i.day===d && i.meal_type===t)} recipes={recipes} onAdd={add} />
-                                </td>
-                            ))}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    )
-}
-
-function MealCell({ day, type, items, recipes, onAdd }) {
   return (
-    <div>
-      <ul>
-        {items.map(i => (
-          <li key={i.id}>{i.title || "(no recipe)"}</li>
+    <div style={{ padding: 16, display: "grid", gap: 12 }}>
+      <h2>Meal Plan for week starting {plan.week_start}</h2>
+
+      {/* Simple grid: rows = meal types, columns = days */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `160px repeat(${DAYS.length}, 1fr)`,
+          gap: 8,
+          alignItems: "start",
+        }}
+      >
+        {/* Header row */}
+        <div />
+        {DAYS.map((d) => (
+          <div key={`hdr-${d}`} style={{ fontWeight: 600, textAlign: "center" }}>
+            {d}
+          </div>
         ))}
+
+        {/* Body */}
+        {MEAL_TYPES.map((mt) => (
+          <React.Fragment key={`row-${mt}`}>
+            <div style={{ fontWeight: 600 }}>{mt}</div>
+            {DAYS.map((d) => (
+              <MealCell
+                key={`cell-${d}-${mt}`}
+                day={d}
+                type={mt}
+                items={itemsForCell(d, mt)}
+                recipes={recipes}
+                onAdd={onAdd}
+              />
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Cell component: shows items + a dropdown to add a local recipe */
+function MealCell({ day, type, items, recipes, onAdd }) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = async (e) => {
+    const v = e.target.value;
+    if (!v) return;
+    setSaving(true);
+    try {
+      await onAdd(day, type, Number(v));
+    } finally {
+      setValue(""); // reset dropdown back to placeholder
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>
+        {items.map((i) => {
+          const title =
+            i.title || i.external_title || i.recipe?.title || "(no recipe)";
+        // If you want, add a small delete button here using your DELETE /meal_items/:id route
+          return <li key={i.id}>{title}</li>;
+        })}
       </ul>
 
       <select
-        onChange={e => e.target.value && onAdd(day, type, Number(e.target.value))}
-        defaultValue=""
+        value={value}
+        onChange={handleChange}
+        disabled={saving || recipes.length === 0}
+        style={{ marginTop: 6, width: "100%" }}
       >
-        <option value="" disabled>Add recipe...</option>
-        {recipes.map(r => (
-          <option key={r.id} value={r.id}>{r.title}</option>
+        <option value="" disabled>
+          {saving ? "Adding…" : "Add recipe..."}
+        </option>
+        {recipes.map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.title}
+          </option>
         ))}
       </select>
     </div>
