@@ -12,9 +12,6 @@ function Section({ title, children }) {
 }
 
 export default function RecipeDetailPage() {
-  // We support two route shapes:
-  //   /recipe/external/:provider/:externalId
-  //   /recipe/local/:id
   const params = useParams();
   const isExternal = !!params.provider && !!params.externalId;
   const recipeId = params.id;
@@ -34,18 +31,19 @@ export default function RecipeDetailPage() {
       try {
         let detail;
         if (isExternal) {
-          // External: GET /recipes/:provider/:external_id (JWT required)
           detail = await api.get(`recipes/${provider}/${externalId}`).json();
-          // Expected shape: { title, image, ingredients: [{name, quantity}], steps? }
         } else {
-          // Local: GET /recipes/:id (JWT required)
           detail = await api.get(`recipes/${recipeId}`).json();
-          // Expected shape: { id, title, ingredients (string), steps (string) }
         }
         setData(detail);
       } catch (e) {
         console.error(e);
-        setErr("Could not load recipe details.");
+        try {
+          const body = await e.response?.json();
+          setErr(body?.message || "Could not load recipe details.");
+        } catch {
+          setErr("Could not load recipe details.");
+        }
       } finally {
         setLoading(false);
       }
@@ -61,8 +59,8 @@ export default function RecipeDetailPage() {
         .map((it) => {
           const name = (it?.name || "").trim();
           const qty = (it?.quantity || "").trim();
-          if (!name) return null;
-          return qty ? `${qty} — ${name}` : name;
+          if (!name && !qty) return null;
+          return qty && name ? `${qty} — ${name}` : (name || qty);
         })
         .filter(Boolean);
 
@@ -76,7 +74,7 @@ export default function RecipeDetailPage() {
       );
     }
 
-    // Local: newline string
+    // Local: newline-separated string
     if (typeof data.ingredients === "string") {
       const lines = data.ingredients
         .split(/\r?\n/)
@@ -98,17 +96,29 @@ export default function RecipeDetailPage() {
   const renderSteps = useMemo(() => {
     if (!data) return null;
 
-    // steps might be string or array or missing
-    const steps = Array.isArray(data.steps)
-      ? data.steps.join("\n")
-      : typeof data.steps === "string"
-      ? data.steps
-      : "";
+    // Prefer server-normalized 'steps'; then fall back to 'instructions';
+    // finally, flatten 'analyzedInstructions' if present.
+    let stepsText = "";
+    if (Array.isArray(data.steps)) {
+      stepsText = data.steps.join("\n");
+    } else if (typeof data.steps === "string") {
+      stepsText = data.steps;
+    } else if (typeof data.instructions === "string") {
+      stepsText = data.instructions;
+    } else if (Array.isArray(data.analyzedInstructions)) {
+      const collected = [];
+      for (const block of data.analyzedInstructions) {
+        for (const s of block.steps || []) {
+          if (s?.step) collected.push(s.step);
+        }
+      }
+      if (collected.length) stepsText = collected.join("\n\n");
+    }
 
-    if (!steps.trim()) return <em>No instructions provided.</em>;
+    if (!stepsText.trim()) return <em>No instructions provided.</em>;
 
     // Split into paragraphs by blank lines
-    const paras = steps.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    const paras = stepsText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
     return (
       <ol style={{ paddingLeft: 18 }}>
         {paras.map((p, i) => (
@@ -134,6 +144,12 @@ export default function RecipeDetailPage() {
           alt={title}
           style={{ width: "100%", maxHeight: 400, objectFit: "cover", borderRadius: 8 }}
         />
+      )}
+
+      {data.sourceUrl && (
+        <div>
+          <a href={data.sourceUrl} target="_blank" rel="noreferrer">Original source</a>
+        </div>
       )}
 
       <Section title="Ingredients">

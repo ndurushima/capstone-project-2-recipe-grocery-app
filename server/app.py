@@ -32,7 +32,6 @@ def create_app(config_class=Config):
     # Blueprints
     from .auth import auth_bp
     from .api import api_bp
-    from . import models  # ensure models import registers tables
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(api_bp)
@@ -40,11 +39,5 @@ def create_app(config_class=Config):
     @app.get("/")
     def health():
         return {"status": "ok"}
-
-    # Optional: make 500s return JSON (CORS still applied by flask-cors)
-    @app.errorhandler(500)
-    def internal_error(e):
-        current_app.logger.exception("Unhandled 500")
-        return jsonify(error="INTERNAL_SERVER_ERROR"), 500
 
     return app

@@ -1,10 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from .extensions import db
 from .models import Recipe, MealPlan, MealItem, ShoppingItem, User
 from .pagination import paginate
 import json
 from datetime import date
+from flask_cors import cross_origin
 
 
 api_bp = Blueprint("api", __name__)
@@ -276,15 +277,22 @@ def recipes_search():
 
 @api_bp.get("/recipes/<provider>/<external_id>")
 @jwt_required()
+@cross_origin(origins=["http://localhost:5173", "http://127.0.0.1:5173"])
 def recipe_detail(provider, external_id):
     from .recipes_api import get_recipe_detail
-    raw = get_recipe_detail(external_id)
+    try:
+        raw = get_recipe_detail(external_id)
+    except Exception as e:
+        current_app.logger.exception("recipe_detail failed")
+        return {
+            "error": "RECIPE_UPSTREAM_ERROR",
+            "message": str(e),
+        }, 502
 
-    # Normalize common fields
+    # Normalize -> always return {title, image, ingredients[], steps}
     title = raw.get("title") or raw.get("name") or ""
     image = raw.get("image") or raw.get("imageUrl")
 
-    # Ingredients: prefer our canonical [{name, quantity}]
     ingredients = raw.get("ingredients")
     if ingredients is None and "extendedIngredients" in raw:
         ingredients = [
@@ -295,7 +303,6 @@ def recipe_detail(provider, external_id):
             for i in (raw.get("extendedIngredients") or [])
         ]
 
-    # Steps: support multiple upstream shapes
     steps = raw.get("steps") or raw.get("instructions")
     if not steps and isinstance(raw.get("analyzedInstructions"), list):
         collected = []
@@ -311,6 +318,7 @@ def recipe_detail(provider, external_id):
         "ingredients": ingredients or [],
         "steps": steps or "",
     }, 200
+
 
 @api_bp.post("/meal_items/external")
 @jwt_required()
