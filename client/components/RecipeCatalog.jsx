@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useToast } from "../toast/ToastContext";
+
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -13,6 +15,7 @@ export default function RecipeCatalog() {
   const [loading, setLoading] = useState(false);
   const [didSearch, setDidSearch] = useState(false);
   const [addingId, setAddingId] = useState(null);
+  const { push } = useToast();
 
   // selection to place a found recipe onto a plan
   const [planId, setPlanId] = useState(""); // user types their meal_plan_id
@@ -61,7 +64,7 @@ export default function RecipeCatalog() {
 
   async function addToPlan(r) {
     if (!planId) {
-      alert("Enter a meal_plan_id first.");
+      push("Enter a meal_plan_id first."), { type: "error" };
       return;
     }
     try {
@@ -75,10 +78,15 @@ export default function RecipeCatalog() {
             external_id: r.external_id,
             },
         }).json();
-      alert(`Added "${r.title}" to plan ${planId} (${day} ${mealType})`);
+      push(`Added "${r.title}" to plan ${planId} (${day} ${mealType})`, { type: "success" });
     } catch (err) {
       console.error(err);
-      alert("Failed to add to plan. Check console/server logs.");
+      let msg = "Failed to add to plan.";
+      try {
+        const body = await err.response?.json();
+        if (body?.error || body?.message) msg += ` ${body.error ?? ""} ${body.message ?? ""}`.trim();
+      } catch {}
+      push(msg, { type: "error" });
     } finally {
         setAddingId(null);
     }

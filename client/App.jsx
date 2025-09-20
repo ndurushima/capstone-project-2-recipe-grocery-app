@@ -8,6 +8,7 @@ import SignupPage from "./pages/SignupPage.jsx";
 import PlanPage from "./pages/PlanPage.jsx";
 import PlansIndex from "./pages/PlansIndex.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
+import ToastProvider from "./toast/ToastContext";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -18,12 +19,11 @@ function PrivateRoute({ children }) {
 export default function App() {
   const { user, logout } = useAuth();
   return (
-    <>
+    <ToastProvider>
       <header style={{ display: "flex", gap: 12, padding: 12, borderBottom: "1px solid #eee" }}>
         <Link to="/">Recipes</Link>
         <Link to="/calendar">Meal Plan</Link>
         <Link to="/shopping">Shopping</Link>
-        {/* Removed the duplicate "Meal Plan" link to /plans */}
         <span style={{ marginLeft: "auto" }}>
           {user ? (
             <>
@@ -46,10 +46,10 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
 
-        {/* Optional: keep plans routes for deep links */}
+        {/* Optional deep links */}
         <Route path="/plans" element={<PrivateRoute><PlansIndex /></PrivateRoute>} />
         <Route path="/plans/:id" element={<PrivateRoute><PlanPage /></PrivateRoute>} />
       </Routes>
-    </>
+    </ToastProvider>
   );
 }

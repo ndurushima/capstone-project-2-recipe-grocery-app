@@ -48,7 +48,7 @@ export default function AuthProvider({ children }) {
         if (!token) throw new Error("No token returned");
         localStorage.setItem("token", token);
         try {
-            const me = await api.get("me").json();
+            const me = await api.get("auth/me").json();
             setUser(me);
         } catch {
             setUser(data.user ?? null);
